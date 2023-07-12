@@ -123,13 +123,21 @@ struct StockCell: View{
                         .bold()
                 }
                 .padding(2)
+                
                 VStack(alignment: .leading) {
                     Text(stock.name)
                         .font(.title3)
                         .bold()
                         .lineLimit(1)
                     Spacer()
-                    Text(stock.currency + " " + String(formatCurrency(amount: Double(stock.currentPriceCents))))
+                    HStack{
+                        Text(stock.currency + " " + String(formatCurrency(amount: Double(stock.currentPriceCents))))
+                        
+                        Spacer()
+                        if let quantity = stock.quantity {
+                            Text("Qty: " + String(quantity))
+                        }
+                    }
                     Spacer()
                     Text(String(formatDate(timestamp: Double( stock.currentPriceTimestamp))))
                 }
