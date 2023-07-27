@@ -9,12 +9,12 @@ import Foundation
 import Combine
 
 enum AsyncStatus {
-    case initial, loading, loaded, error, success
+    case initial, loading, error, success
 }
 
 class ViewModel: ObservableObject {
     @Published var stocks: StockResponse? = nil
-    @Published var status: AsyncStatus = .initial
+    @Published var status: AsyncStatus = .loading
 
     let service : ServiceProtocol
     var cancellables = Set<AnyCancellable>()
@@ -28,10 +28,13 @@ class ViewModel: ObservableObject {
     
     @MainActor func fetchStocksAsyncAwait(){
         status = .loading
+        
         Task{
             do {
                 let fetchedStocks = try await service.getStockAsyncAwait()
                 self.stocks = fetchedStocks
+                //Sleep for 10s to see loading progress view
+                try await Task.sleep(nanoseconds: 3 * 1_000_000_000)
                 status = .success
             } catch {
                 if let apiError = error as? APIError {

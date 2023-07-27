@@ -17,17 +17,28 @@ struct HomeView: View {
             VStack{
                 NavigationTopView()
                 
+
                 ScrollView {
-                    if let stocks = viewModel.stocks {
-                        LazyVStack(alignment: .leading){
-                            ForEach(stocks.stocks, id: \.ticker){ stock in
-                                StockCell(stock: stock)
-        
+                    switch viewModel.status{
+                    case .initial:
+                        Text("Stock List")
+                    case .loading:
+                        ProgressView()
+                            .frame(width: 400, height: 400)
+                            .scaleEffect(5)
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    case .success:
+                        if let stocks = viewModel.stocks {
+                            LazyVStack(alignment: .leading){
+                                ForEach(stocks.stocks, id: \.ticker){ stock in
+                                    StockCell(stock: stock)
+                                }
                             }
                         }
-                    } else {
-                        Text("Loading...")
+                    case .error:
+                        Text("Error Occur")
                     }
+                    
                 }
                 .padding(.horizontal, 10)
                 .onAppear{
