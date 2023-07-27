@@ -11,7 +11,8 @@ struct StockResponse: Codable {
     let stocks: [Stock]
 }
 
-struct Stock: Codable {
+struct Stock: Codable, Identifiable {
+    let id = UUID()
     let ticker: String
     let name: String
     let currency: String

@@ -15,7 +15,7 @@ enum FileName: String {
     case getStocksSuccess
 }
 final class CashAppStocksTests: XCTestCase {
-
+    var cancellables = Set<AnyCancellable>()
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
     }
@@ -24,63 +24,83 @@ final class CashAppStocksTests: XCTestCase {
         // Put teardown code here. This method is called after the invocation of each test method in the class.
     }
     
-    func testGetStocksSuccess(){
-        let exp = XCTestExpectation(description: "testing success")
-        
+    func testGetStocksAsyncAwaitSuccess() async throws{
+        // Expectation: The sectionPosts should be populated correctly
+        // Set up any necessary mock objects or data
+        let exp = XCTestExpectation(description: "fetch successfully")
         let viewModel = ViewModel(service: MockService(fileName: .getStocksSuccess))
-        viewModel.fetchStocks()
         
-        // Use DispatchQueue to introduce delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            //Assertion checks
-            XCTAssertEqual(viewModel.stocks?.stocks.first?.ticker, "^GSPC")
-            exp.fulfill()
-        }
-
-        // Wait for the expectation to be fulfilled
-        wait(for: [exp], timeout: 5.0)
-    }
-    
-    func testGetStocksFailureEmpty(){
-        let exp = XCTestExpectation(description: "testing failure empty")
-
-        let viewModel = ViewModel(service: MockService(fileName: .getStocksFailureEmpty))
-        viewModel.fetchStocks()
-        
-        // Use DispatchQueue to introduce delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            //Assertion checks
-            XCTAssertEqual(viewModel.stocks?.stocks.count, 0)
-            exp.fulfill()
-        }
-
-        // Wait for the expectation to be fulfilled
-        wait(for: [exp], timeout: 5.0)
-    }
-    
-    func testGetStocksFailureMalformed(){
-        let exp = XCTestExpectation(description: "testing failure malformed")
-
-        let viewModel = ViewModel(service: MockService(fileName: .getStocksFailureMalformed))
-        viewModel.fetchStocks()
-        
-        // Use DispatchQueue to introduce delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            // Check the status
-            switch viewModel.status {
-            case .error(_):
-                // success, do nothing
-                break
-            default:
-                XCTFail("Expected .error status")
+        // Call the function being tested
+        await viewModel.fetchStocksAsyncAwait()
+        viewModel.$stocks
+            .dropFirst()
+            .sink { stockResponse in
+                //                print(stockResponse ?? "no stock from test")
+                XCTAssertFalse(stockResponse?.stocks.isEmpty ?? true, "Stocks array should not be empty")
+                exp.fulfill()
             }
-            exp.fulfill()
-        }
-
-        // Wait for the expectation to be fulfilled
-        wait(for: [exp], timeout: 5.0)
+            .store(in: &cancellables)
+        
+        await fulfillment(of: [exp], timeout: 5.0)
     }
-
+    
+    func testGetStocksAsyncAwaitFail() async throws{
+        // Expectation: The sectionPosts should be populated correctly
+        // Set up any necessary mock objects or data
+        let exp = XCTestExpectation(description: "fetch fail")
+        let viewModel = ViewModel(service: MockService(fileName: .getStocksFailureEmpty))
+        
+        // Call the function being tested
+        await viewModel.fetchStocksAsyncAwait()
+        viewModel.$stocks
+            .dropFirst()
+            .sink { stockResponse in
+                print(stockResponse ?? "no stock from test")
+                XCTAssertTrue(stockResponse?.stocks.isEmpty ?? false, "Stocks array should be empty")
+                exp.fulfill()
+            }
+            .store(in: &cancellables)
+        
+        await fulfillment(of: [exp], timeout: 5.0)
+    }
+    
+    func testGetStocksFutureSuccess(){
+        // Expectation: The sectionPosts should be populated correctly
+        // Set up any necessary mock objects or data
+        let exp = XCTestExpectation(description: "fetch successfully")
+        let viewModel = ViewModel(service: MockService(fileName: .getStocksSuccess))
+        
+        // Call the function being tested
+        viewModel.fetchStockFuture()
+        
+        viewModel.$stocks
+            .sink { stockResponse in
+                XCTAssertTrue(stockResponse?.stocks.first?.name.contains("500") ?? false, "Fail the test")
+                exp.fulfill()
+            }
+            .store(in: &cancellables)
+        wait(for: [exp], timeout: 5.0)
+        
+    }
+    
+    func testGetStocksFutureFail(){
+        // Expectation: The sectionPosts should be populated correctly
+        // Set up any necessary mock objects or data
+        let exp = XCTestExpectation(description: "fetch fail")
+        let viewModel = ViewModel(service: MockService(fileName: .getStocksFailureEmpty))
+        
+        // Call the function being tested
+        viewModel.fetchStockFuture()
+        
+        viewModel.$stocks
+            .sink { stockResponse in
+                XCTAssertTrue(stockResponse?.stocks.isEmpty ?? false, "Fail the test")
+                exp.fulfill()
+            }
+            .store(in: &cancellables)
+        wait(for: [exp], timeout: 5.0)
+        
+    }
 }
 
 class MockService : ServiceProtocol{
@@ -94,17 +114,40 @@ class MockService : ServiceProtocol{
             return Bundle(for: type(of: self)).url(forResource: file, withExtension: "json")
         }
         
-    func getStock() async throws -> StockResponse {
+    func getStockAsyncAwait() async throws -> StockResponse {
         guard let url = self.loadMockData(fileName.rawValue) else { throw APIError.invalidURL }
+        
         let data = try! Data(contentsOf: url)
 
         do {
             let decoder = JSONDecoder()
             decoder.keyDecodingStrategy = .convertFromSnakeCase
             let stockResponse = try decoder.decode(StockResponse.self, from: data)
+//            print(stockResponse)
             return stockResponse
         } catch {
             throw APIError.decodingError
         }
     }
+    
+    func getStockFuture() -> Future<StockResponse, Error>{
+        return Future{[weak self] promise in
+            guard let self = self, let url = Bundle(for: type(of: self)).url(forResource: fileName.rawValue, withExtension: "json")
+            else {
+                promise(.failure(APIError.invalidURL))
+                return
+            }
+            let data = try! Data(contentsOf: url)
+            do{
+                let decoder = JSONDecoder()
+                decoder.keyDecodingStrategy = .convertFromSnakeCase
+                let stockResponse = try decoder.decode(StockResponse.self, from: data)
+//                print(stockResponse)
+                promise(.success(stockResponse))
+            } catch {
+                promise(.failure(APIError.decodingError))
+            }
+        }
+    }
 }
+

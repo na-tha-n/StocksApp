@@ -9,6 +9,7 @@ import SwiftUI
 
 struct HomeView: View {
     @ObservedObject private var viewModel = ViewModel(service: Service())
+    @State var service = Service()
     var body: some View {
         ZStack{
             LinearGradient(gradient: Gradient(colors: [Color.black, Color.blue]), startPoint: .topLeading, endPoint: .bottom)
@@ -21,6 +22,7 @@ struct HomeView: View {
                         LazyVStack(alignment: .leading){
                             ForEach(stocks.stocks, id: \.ticker){ stock in
                                 StockCell(stock: stock)
+        
                             }
                         }
                     } else {
@@ -29,7 +31,9 @@ struct HomeView: View {
                 }
                 .padding(.horizontal, 10)
                 .onAppear{
-                    viewModel.fetchStocks()
+                    viewModel.fetchStocksAsyncAwait()
+//                    service.getStockFuture()
+//                    viewModel.fetchStockFuture()
                 }
 //                .overlay(
 //                    RoundedRectangle(cornerRadius: 15)

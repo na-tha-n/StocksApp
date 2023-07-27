@@ -6,7 +6,7 @@
 //
 
 import Foundation
-
+import Combine
 enum APIError: Error{
     case invalidURL
     case invalidResponse
@@ -27,13 +27,16 @@ enum APIError: Error{
 }
 
 protocol ServiceProtocol{
-    func getStock() async throws -> StockResponse
+    func getStockAsyncAwait() async throws -> StockResponse
+    func getStockFuture() -> Future<StockResponse, Error>
+    
 }
 
 class Service : ServiceProtocol{
-    func getStock() async throws -> StockResponse{
+    let endpoint = "https://storage.googleapis.com/cash-homework/cash-stocks-api/portfolio.json"
+    var cancellables = Set<AnyCancellable>()
+    func getStockAsyncAwait() async throws -> StockResponse{
         //Prepare URL
-        let endpoint = "https://storage.googleapis.com/cash-homework/cash-stocks-api/portfolio.json"
         //Empty Json response
 //        let endpoint = "https://storage.googleapis.com/cash-homework/cash-stocks-api/portfolio_empty.json"
         //Malformed Json response
@@ -52,7 +55,6 @@ class Service : ServiceProtocol{
             let decoder = JSONDecoder()
             decoder.keyDecodingStrategy = .convertFromSnakeCase //convert to Camel case from Snake Case
             result = try decoder.decode(StockResponse.self, from: data)
-//            print(result)
         } catch {
             throw APIError.decodingError
         }
@@ -62,10 +64,40 @@ class Service : ServiceProtocol{
             if result.stocks.isEmpty {
                 throw APIError.emptyData
             }
-//            print(result)
             return result
         } else {
             throw APIError.decodingError
+        }
+    }
+    
+    func getStockFuture() -> Future<StockResponse, Error> {
+        return Future{[weak self] promise in
+            guard let self = self, let url = URL(string: endpoint)
+            else {
+                promise(.failure(APIError.invalidURL))
+                return
+            }
+            //change decoding strategy from snake case to camel case
+            let decoder = JSONDecoder()
+            decoder.keyDecodingStrategy = .convertFromSnakeCase
+            
+            URLSession.shared.dataTaskPublisher(for: url)
+                .map{$0.data}
+                .decode(type: StockResponse.self, decoder: decoder)
+                .receive(on: DispatchQueue.main)
+                .sink { completion in
+                    switch completion{
+                    case .finished:
+                        break
+                    case .failure(let err):
+//                        print("\(err.localizedDescription)")
+                        promise(.failure(err))
+                    }
+                } receiveValue: { response in
+//                    print(response)
+                    promise(.success(response))
+                }
+                .store(in: &self.cancellables)
         }
     }
 }
